@@ -2,12 +2,14 @@ import numpy as np
 from ultralytics import YOLO
 import supervision as sv
 import cv2
+import os
 
 
 class Detector:
 
-    def __init__(self, weight: str):
-        self.model = YOLO(weight)
+    def __init__(self):
+        weight_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best.pt')
+        self.model = YOLO(weight_path)
 
     def detect(self, image=None):
         test_mode = False
@@ -61,7 +63,7 @@ class Detector:
 
 
 if __name__ == '__main__':
-    detector = Detector('best.pt')
+    detector = Detector()
     xyxy, tiles = detector.detect()
     print('%d tiles' % len(tiles))
     for x, t in zip(xyxy, tiles):
