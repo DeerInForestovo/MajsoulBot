@@ -17,6 +17,9 @@ yolov8识别游戏界面 + 不知道什么原理的AI（来自[EndlessCheng](htt
 3. 工作流程为：在首页开启脚本，自动匹配银之间三人东对局，自动进行对局（只看当前手牌信息，打银之间够用），结束后自动开启下一把
 4. 游戏过程中，不要挪动窗口，因为截图位置是固定的。同理想要避免鼠标被脚本一直抢（比如你想关掉脚本的时候）将窗口挪开或切屏即可
 
+> [!NOTE]
+> 如遇到PyAutoGui无法点击的问题，以管理员权限运行Python
+
 数据集：
 
 + 日麻麻将牌：https://universe.roboflow.com/project-xv49e/mahjong-x5dzz/dataset/2
