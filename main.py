@@ -73,7 +73,15 @@ if __name__ == '__main__':
                     continue
                 if waiting and time() - waiting_from > IDLE_TIME:  # 匹配游戏
                     print('begin to queue')
-                    for _ in range(20):
+                    # 时间最长的情况：
+                    # 1.终局位次结算
+                    # 2.段位结算
+                    # 3.获得宝匣礼物
+                    # 4.获得羁绊之心
+                    # 5.每日任务第一页
+                    # 6.每日任务第二页
+                    # 7.获得活动限定道具
+                    for _ in range(60):
                         my_click.click(QUE_DING)  # 点确定（无倒计时）
                         sleep(0.1)
                     sleep(8)
