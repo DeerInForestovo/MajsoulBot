@@ -28,7 +28,7 @@ def step(hand: list):
     # Project: https://github.com/EndlessCheng/mahjong-helper
     # Also star him plz!
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mahjong-helper.exe')
-    result = subprocess.getoutput(file_path + ' ' + str_hand)
+    result = subprocess.run([file_path, str_hand], capture_output=True, text=True, encoding='utf-8').stdout
     print(result)
     tenpai = bool('听牌：' in result)
     result = result.replace('切牌', '')  # 可能出现的提示
