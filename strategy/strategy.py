@@ -1,7 +1,6 @@
 import subprocess
 import copy
 import os
-import re
 
 
 TRANSLATOR = {'东': '1z', '南': '2z', '西': '3z', '北': '4z', '白': '5z', '发': '6z', '中': '7z',
@@ -17,24 +16,27 @@ def step(hand: list):
     Discard a tile which maximizes the number of tiles which can form a new set
     :param log: log or not
     :param hand: list (length=14) of tiles (str like '1p', '2z')
-    :return: tile: str or None, bool: (str like '1p', '2z') indicating which to discard, click or not
+    :return: tile: str (str like '1p', '2z') indicating which to discard
+             action: str ('lizhi', 'babei', ...)
     """
     if len(hand) != 14:
-        return hand[0], False
+        return hand[0], None
     if '4z' in hand:
-        return None, True  # 拔北
+        return None, 'babei'
     str_hand = ''.join(hand)
     # Author : https://github.com/EndlessCheng
     # Project: https://github.com/EndlessCheng/mahjong-helper
     # Also star him plz!
     file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mahjong-helper.exe')
-    result = subprocess.getoutput(file_path + ' ' + str_hand)
-    print(result)
+    # Thank you, QuanQuan-CHO!
+    # result = subprocess.getoutput(file_path + ' ' + str_hand)
+    result = subprocess.run([file_path, str_hand], capture_output=True, text=True, encoding='utf-8').stdout
+    # print(result)
     tenpai = bool('听牌：' in result)
     result = result.replace('切牌', '')  # 可能出现的提示
     best_tile = (result[result.index('切'):])[1:3]
     best_tile = ('' if best_tile[0] == ' ' else best_tile[0]) + (TRANSLATOR[best_tile[1]])
-    return best_tile, tenpai
+    return best_tile, ('lizhi' if tenpai else None)
 
 
 if __name__ == '__main__':
@@ -47,4 +49,3 @@ if __name__ == '__main__':
     #         hand.append(CARD[random.randint(0, 10)])
     #     print(sort_hand(hand))
     #     print(step(hand))
-

@@ -1,136 +1,130 @@
-import webbrowser
 import cv2
-from detector.detector import Detector
-from strategy.strategy import step, sort_hand
-import pygetwindow as gw
-from pygetwindow import PyGetWindowException
 import pyscreenshot
 import numpy as np
 from time import time, sleep
-import pyautogui
 
-IDLE_TIME = 20  # 超过这个时间认为需要重新匹配游戏
+from utils.click import MyClick
+from utils.window import get_box
+from detector.detector import Detector
+from strategy.strategy import step, sort_hand
 
-# 屏幕分辨率：2880*1800
-# 游戏分辨率：1600*1200
-IDLE = (400, 400)  # 挪开鼠标避免印象截图
-DUAN_WEI_CHANG = (1102, 484)
-YIN_ZHI_JIAN = (1128, 700)
-SAN_REN_DONG = (1135, 830)
-QUE_DING = (1432, 1040)
-OPERATION = (857, 897)  # 拔北或立直
-HE_PAI = (35, 680)
-TIAO_GUO = (36, 740)
-
-
-class MyClick:
-
-    def __init__(self):
-        self.left_corner = (0, 0)
-
-    def set_left_corner(self, left_corner: (int, int)):
-        self.left_corner = left_corner
-
-    def click(self, position: (int, int), c=True) -> None:
-        x, y = position[0] + self.left_corner[0], position[1] + self.left_corner[1]
-        print('click x = %d, y = %d' % (x, y))
-        pyautogui.moveTo(x, y)
-        if c:
-            pyautogui.click()
-
-
-def get_window():
-    # 请不要打开其他叫（或包含）这个名字的窗口，可能导致 bug
-    return gw.getWindowsWithTitle('雀魂麻將')[0]
-
-
-def get_box():
-    target_window = get_window()
-    window_not_found = box is None
-    if window_not_found:
-        webbrowser.open('steam://rungameid/1329410')  # Majsoul
-    while box is None:
-        target_window = get_window()
-    if window_not_found:
-        try:
-            target_window.activate()
-        except PyGetWindowException as e:
-            print(e)  # 大部分时候是 pygetwindow.PyGetWindowException: Error code from Windows: 0 - 操作成功完成。
-    return (target_window.left, target_window.top,
-            target_window.right, target_window.bottom)
-
+MAX_QUEUE_TIME = 30  # 超过30秒重新开始匹配
 
 if __name__ == '__main__':
     my_click = MyClick()
     my_detector = Detector()
     my_step = step
 
-    waiting_from = time() - IDLE_TIME
-    waiting = True
+    waiting = False
     queuing = False
+    confirming = False
+    wait_time = None
+    queue_time = None
+    confirm_time = None
     while True:
-        # sleep
-        sleep(1.5)
-
         # get box
         box = get_box()
-        my_click.set_left_corner((box[0], box[1]))
+        my_click.set_top_left_corner(box)
 
         # get and detect game frame
         image = np.array(pyscreenshot.grab(box))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        xyxy, tiles = my_detector.detect(image)
-        print('detect result:')
-        print(sort_hand(tiles))
+        xyxy_tiles, tiles = my_detector.detect_tiles(image)
+        xyxy_buttons, buttons = my_detector.detect_frame(image)
 
-        # state-machine
-        if len(tiles) < 13:
-            if queuing:  # 匹配中
+        print('############################################')
+        print(str(len(tiles)) + ' tiles')
+        print(sort_hand(tiles))
+        print(buttons)
+        print('############################################')
+
+        if '3p-east' in buttons:
+            waiting = False
+            confirming = False
+            if queuing and time() - queue_time < MAX_QUEUE_TIME:
                 print('queuing')
                 continue
-            if waiting and time() - waiting_from > IDLE_TIME:  # 匹配游戏
-                print('begin to queue')
-                for _ in range(20):
-                    my_click.click(QUE_DING)  # 点确定（无倒计时）
-                    sleep(0.3)
-                sleep(8)
-                my_click.click(DUAN_WEI_CHANG)
-                sleep(0.8)
-                my_click.click(YIN_ZHI_JIAN)
-                sleep(0.8)
-                my_click.click(SAN_REN_DONG)
-                waiting = False
-                queuing = True  # 直到模型识别到麻将牌，结束匹配
-            elif not waiting:  # 开始等待
-                print('begin to wait')
-                waiting = True
-                waiting_from = time()
-        else:  # 在游戏中
-            if waiting or queuing:
-                # 刚进入游戏
-                waiting = False
-                queuing = False
-                my_click.click(HE_PAI)  # 点自动和牌
-                sleep(0.06)
-                my_click.click(TIAO_GUO)  # 点不吃碰杠
-                sleep(0.06)
-            my_click.click(QUE_DING)  # 点确定（无倒计时）以防误判
-            sleep(0.1)
-            if len(tiles) == 13:  # 空闲或等待鸣牌
-                print('waiting during game')
-            else:  # 等待出牌
-                print('play')
-                best_tile, click = my_step(tiles)
-                if click:
-                    print('click')
-                    my_click.click(OPERATION)  # 拔北或立直
-                    sleep(0.12)
-                if best_tile is not None:
-                    try:
-                        index = tiles.index(best_tile)
-                    except ValueError as e:
-                        index = 0
-                    print('discard ' + tiles[index])
-                    my_click.click(((xyxy[index][0] + xyxy[index][2]) // 2,
-                                    (xyxy[index][1] + xyxy[index][3]) // 2))
-            my_click.click(IDLE, False)
+            if len(buttons) != 1:
+                print('inference again')
+                continue
+            print('click 3p-east')
+            my_click.click(xyxy_buttons[buttons.index('3p-east')])
+            queuing = True
+            queue_time = time()
+        else:
+            waiting = False
+            queuing = False
+            if 'confirm' in buttons:
+                # 有倒计时的确定就让其自动消失，连续检测到说明是没有倒计时的，此时狂点
+                print('confirm detected')
+                if not confirming:
+                    confirming = True
+                    confirm_time = time()
+                elif time() - confirm_time > 5:
+                    confirming = False
+                    print('click confirm')
+                    box = xyxy_buttons[buttons.index('confirm')]
+                    # 点左上角……不然bot就要帮你抽十连了
+                    box[2] -= (box[2] - box[0]) // 2
+                    box[3] -= (box[3] - box[1]) // 2
+                    for i in range(30):
+                        my_click.click(box)
+                        sleep(0.1)
+            else:
+                confirming = False
+                if 'match' in buttons:
+                    print('click match')
+                    my_click.click(xyxy_buttons[buttons.index('match')])
+                elif 'silver' in buttons:
+                    print('click silver')
+                    my_click.click(xyxy_buttons[buttons.index('silver')])
+                elif 'zimo' in buttons:
+                    print('click zimo')
+                    my_click.click(xyxy_buttons[buttons.index('zimo')])
+                elif 'he' in buttons:
+                    print('click he')
+                    my_click.click(xyxy_buttons[buttons.index('he')])
+                # elif 'babei' in buttons:
+                #     print('click babei')
+                #     my_click.click(xyxy_buttons[buttons.index('babei')])
+                elif ('chi' in buttons or 'peng' in buttons or 'gang' in buttons) and \
+                        'lizhi' not in buttons and 'babei' not in buttons:
+                    if 'chi' in buttons:
+                        print('refuse chi')
+                    if 'peng' in buttons:
+                        print('refuse peng')
+                    if 'gang' in buttons:
+                        print('refuse gang')
+                    if 'tiaoguo' in buttons:
+                        print('click tiaoguo')
+                        my_click.click(xyxy_buttons[buttons.index('tiaoguo')])
+                    else:
+                        print('chi/peng/gang found, but tiaoguo not found')
+                elif len(tiles) == 14:
+                    print('discard')
+                    tile, button = my_step(tiles)
+                    print('tile = %s, button = %s' % (tile, button))
+                    if button in buttons:
+                        my_click.click(xyxy_buttons[buttons.index(button)])
+                        sleep(0.3)
+                    elif button:
+                        print('button not found')
+                    if tile in tiles:
+                        my_click.click(xyxy_tiles[tiles.index(tile)])
+                    elif tile:
+                        print('tile not found')
+                else:
+                    print('waiting')
+                    if not waiting:
+                        waiting = True
+                        wait_time = time()
+                    elif time() - wait_time > MAX_QUEUE_TIME:
+                        # 很久没有检测到认识的目标了，应该是卡在了领取奖励页面
+                        waiting = False
+                        for i in range(7):
+                            my_click.click((0, 0, box[2] - box[0], box[3] - box[1]))
+                            sleep(0.05)
+
+        # 将鼠标挪到中间，避免遮挡目标
+        if not waiting:
+            my_click.click((0, 0, box[2] - box[0], box[3] - box[1]), click=False)

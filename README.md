@@ -2,7 +2,9 @@
 
 雀魂三麻bot
 
-yolov8识别游戏界面 + 不知道什么原理的AI（来自[EndlessCheng](https://github.com/EndlessCheng)） + pyautogui模拟鼠标点击
+---
+
+yolov8识别游戏界面 + Mahjong-helper（来自[EndlessCheng](https://github.com/EndlessCheng)） + pyautogui模拟鼠标点击
 
 **警告！！！警告！！！警告！！！** 本项目仅供学习体验实战使用yolov8框架，请勿在有价值的账号上使用，请勿频繁使用，请勿商用开源代码。
 
@@ -10,18 +12,18 @@ yolov8识别游戏界面 + 不知道什么原理的AI（来自[EndlessCheng](htt
 
 错误商用本代码，作者保留追责权利，或至少画个圈圈诅咒你。
 
-使用方法：
+### 使用方法：
 
-1. 正确安装yolov8（参考[文档](https://docs.ultralytics.com/quickstart/#install-ultralytics)，需要先手动装pytorch再装yolo
-2. 游戏分辨率应为1600*1200，也可以自行修改main.py中的全局变量（截图放进画图软件，看要点的位置和左上角的距离）
-3. 工作流程为：在首页开启脚本，自动匹配银之间三人东对局，自动进行对局（只看当前手牌信息，打银之间够用），结束后自动开启下一把
-4. 脚本会在游戏崩端时自动重启并唤醒窗口，但不会在窗口缩小或被遮挡时唤醒。因此想要关闭脚本只需alt+tab切走窗口即可，检测不到游戏界面时不会进行点击操作。
+1. 正确安装yolov8（参考[文档](https://docs.ultralytics.com/quickstart/#install-ultralytics)，需要先手动装pytorch再装yolo）
+2. 用**管理员模式**启动脚本即可，游戏崩端会自动重启，想要结束脚本关闭即可
 
-数据集：
+### 数据集：
 
 + 日麻麻将牌：https://universe.roboflow.com/project-xv49e/mahjong-x5dzz/dataset/2
 
-引用的仓库：
++ 雀魂UI（自制，规模较小）：https://universe.roboflow.com/majsoulbot/majsoulbot
+
+### 引用的仓库：
 
 + yolov8：https://github.com/ultralytics/ultralytics
 
