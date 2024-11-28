@@ -1,8 +1,11 @@
+import logging
 import numpy as np
 from ultralytics import YOLO
+from paddleocr import PaddleOCR
 import supervision as sv
 import cv2
 import os
+import torch
 
 
 def area(xyxy):
@@ -20,15 +23,21 @@ class Detector:
 
     def __init__(self):
         weight_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mahjong.pt')
-        self.mahjong_model = YOLO(weight_path)
+        self.mahjong_model = YOLO(weight_path, verbose=False)
         weight_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'majsoul_UI.pt')
-        self.majsoul_model = YOLO(weight_path)
+        self.majsoul_model = YOLO(weight_path, verbose=False)
+        self.ocr_model = PaddleOCR(lang='ch')
+        logging.getLogger("ppocr").setLevel(logging.WARNING)  # verbose=False 以及这行都是用来不显示调试信息的
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f'device: {device}')
+        self.mahjong_model = self.mahjong_model.to(device)
+        self.majsoul_model = self.majsoul_model.to(device)
 
     def detect_tiles(self, image=None):
-        test_mode = False
-        if image is None:  # test
-            test_mode = True
-            image = cv2.imread('game.jpg')
+        # test_mode = False
+        # if image is None:  # test
+        #     test_mode = True
+        #     image = cv2.imread('game.jpg')
 
         # inference
         height, width = len(image), len(image[0])
@@ -65,8 +74,8 @@ class Detector:
                         tag = True
                         break
                 if tag:
-                    print('Detector: Wrong tile removed')
-                    test_mode = True  # save the image
+                    # print('Detector: Wrong tile removed')
+                    # test_mode = True  # save the image
                     xyxy_.pop(i)
                     confidence_.pop(i)
                     tiles_.pop(i)
@@ -88,13 +97,13 @@ class Detector:
                         confidence[pos] = confidence_[i]
                         xyxy[pos] = xyxy_[i]
                         tiles[pos] = tiles_[i]
-                print(pos_list)
+                # print(pos_list)
                 for i in range(1, 12):
                     if tiles[i - 1] == tiles[i + 1] and tiles[i - 1] is not None and tiles[i] is None:
                         tiles[i] = tiles[i - 1]
                         xyxy[i] = [xyxy[i - 1][2], xyxy[i - 1][1], xyxy[i + 1][0], xyxy[i + 1][3]]
-                        print('Detector: special fix tile[%d] = %s' % (i, tiles[i]))
-                        test_mode = True
+                        # print('Detector: special fix tile[%d] = %s' % (i, tiles[i]))
+                        # test_mode = True
                         # 连续的三张白可能会识别不出中间那张
                 xyxy = list(filter(lambda x: x[0] is not None, xyxy))
                 tiles = list(filter(lambda x: x is not None, tiles))
@@ -111,21 +120,21 @@ class Detector:
             tiles = []
 
         # test
-        if test_mode or len(tiles) not in [0, 1, 2, 13, 14]:
-            bounding_box_annotator = sv.BoundingBoxAnnotator()
-            label_annotator = sv.LabelAnnotator()
-            labels = [self.mahjong_model.model.names[class_id] for class_id in detections.class_id]
-            annotated_image = bounding_box_annotator.annotate(scene=image, detections=detections)
-            annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
-            cv2.imwrite('last_abnormal_detection.jpg', annotated_image)
+        # if test_mode or len(tiles) not in [0, 1, 2, 13, 14]:
+        #     bounding_box_annotator = sv.BoundingBoxAnnotator()
+        #     label_annotator = sv.LabelAnnotator()
+        #     labels = [self.mahjong_model.model.names[class_id] for class_id in detections.class_id]
+        #     annotated_image = bounding_box_annotator.annotate(scene=image, detections=detections)
+        #     annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
+        #     cv2.imwrite('last_abnormal_detection.jpg', annotated_image)
 
         return xyxy, tiles
 
     def detect_frame(self, image=None):
-        test_mode = False
-        if image is None:  # test
-            test_mode = True
-            image = cv2.imread('game.jpg')
+        # test_mode = False
+        # if image is None:  # test
+        #     test_mode = True
+        #     image = cv2.imread('game.jpg')
 
         # inference
         height, width = len(image), len(image[0])
@@ -160,21 +169,51 @@ class Detector:
                 xyxy[i][3] += top
 
         # test
-        if test_mode:
-            bounding_box_annotator = sv.BoundingBoxAnnotator()
-            label_annotator = sv.LabelAnnotator()
-            labels = [self.majsoul_model.model.names[class_id] for class_id in detections.class_id]
-            annotated_image = bounding_box_annotator.annotate(scene=image, detections=detections)
-            annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
-            cv2.imwrite('detection.jpg', annotated_image)
+        # if test_mode:
+        #     bounding_box_annotator = sv.BoundingBoxAnnotator()
+        #     label_annotator = sv.LabelAnnotator()
+        #     labels = [self.majsoul_model.model.names[class_id] for class_id in detections.class_id]
+        #     annotated_image = bounding_box_annotator.annotate(scene=image, detections=detections)
+        #     annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
+        #     cv2.imwrite('detection.jpg', annotated_image)
 
         return xyxy, buttons
 
+    def detect_characters(self, image=None):
+        height, width = len(image), len(image[0])
+        left, right, top, bottom = 0, width, 0, height
+        image = image[top: bottom, left: right]
+        left, right, top, bottom = int(width * 0.1), width, int(height * 0.2), int(height * 0.6)
+        image[top: bottom, left: right] = 0
+        result = self.ocr_model.ocr(image, cls=False)
+        return_dict = {}
+        for res in result:
+            for line in res:
+                xyxy = (line[0][0][0], line[0][0][1], line[0][2][0], line[0][2][1])
+                ch = line[1][0]
+                kw = None  # keyword
 
-if __name__ == '__main__':
-    detector = Detector()
-    # xyxy, tiles = detector.detect_tiles()
-    # print('%d tiles' % len(tiles))
-    # for x, t in zip(xyxy, tiles):
-    #     print(t + ' ' + str(x))
-    print(detector.detect_frame())
+                if ch == '终局':
+                    kw = 'zhongju'
+                elif ch == '确认':
+                    if 'queren' in return_dict.keys():
+                        return_dict['2queren'] = True
+                        if xyxy[0] < return_dict['queren'][0]:
+                            kw = 'queren'  # 如果多个确认按钮，说明是“再来一场”的确认界面，此时点击靠左的一个
+                    else:
+                        kw = 'queren'
+                elif ch == '再来一场':
+                    if xyxy[1] > height // 2:
+                        kw = 'zailaiyichang'  # 如果“再来一场”出现位置靠上，说明是“再来一场”或其确认界面的标题
+                elif ch == '理和鸣切拔':
+                    kw = 'lhmqb'
+
+                if kw is not None:
+                    return_dict[kw] = xyxy
+        return return_dict
+
+
+# if __name__ == '__main__':
+#     detector = Detector()
+#     print(detector.detect_frame())
+
