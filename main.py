@@ -12,6 +12,7 @@ from detector.detector import Detector
 from strategy.strategy import step
 
 MAX_QUEUE_TIME = 30  # 超过30秒重新开始匹配
+MAX_WAIT_TIME = 15
 
 if __name__ == '__main__':
     colorama.init()
@@ -39,6 +40,8 @@ if __name__ == '__main__':
         xyxy_buttons, buttons = my_detector.detect_frame(image)
         char_dict = my_detector.detect_characters(image)
 
+        print(char_dict.keys())
+
         if '3p-east' in buttons or 'match' in buttons or 'silver' in buttons:  # 匹配中
             print(Fore.GREEN + f'[{datetime.datetime.now()}]: 匹配中' + Fore.WHITE)
             waiting = False
@@ -53,7 +56,7 @@ if __name__ == '__main__':
             elif 'silver' in buttons:
                 my_click.click(xyxy_buttons[buttons.index('silver')])
 
-        elif 'zhongju' in char_dict.keys():  # 终局界面
+        elif 'zhongju' in char_dict.keys() or 'queren' in char_dict.keys():  # 终局界面
             print(Fore.GREEN + f'[{datetime.datetime.now()}]: 终局界面' + Fore.WHITE)
             waiting = queuing = False
             if '2queren' in char_dict.keys():  # 有两个确认，即“再来一场”的确认窗口，此时点确认
@@ -120,7 +123,7 @@ if __name__ == '__main__':
                     print('begin wait.', wait_time)
                     waiting = True
                     wait_time = time()
-                elif time() - wait_time > MAX_QUEUE_TIME:
+                elif time() - wait_time > MAX_WAIT_TIME:
                     # 很久没有检测到认识的目标了，应该是卡在了领取奖励页面
                     # 尝试点击屏幕中心
                     print('wait long.', time())
