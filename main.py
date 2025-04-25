@@ -61,7 +61,6 @@ def press_toolbar(buttons, image):
                     my_click.click((left, top, right, bottom))
 
 
-
 if __name__ == '__main__':
     last_infer_time = -10000
     while True:
@@ -119,6 +118,8 @@ if __name__ == '__main__':
             if len(tiles) == 13:
                 print("In game, not my turn")
                 press_button(buttons, 'tiaoguo')
+                # 也可能是在奖励录取界面，因此尝试点击一下屏幕靠右下的位置
+                my_click.click(((box[2] - box[0]) // 2, (box[3] - box[1]) // 2, box[2] - box[0], box[3] - box[1]))
             elif len(tiles) == 14:
                 print("In game, discard")
                 tile, button = step([t['label'] for t in tiles])
