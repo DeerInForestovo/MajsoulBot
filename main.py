@@ -1,137 +1,134 @@
 import cv2
-import pyscreenshot
+from PIL import ImageGrab
 import numpy as np
-from time import time, sleep
-import colorama
-from colorama import Fore
-import datetime
+from time import time
 
 from utils.click import MyClick
 from utils.window import get_box
 from detector.detector import Detector
 from strategy.strategy import step
 
-MAX_QUEUE_TIME = 30  # 超过30秒重新开始匹配
-MAX_WAIT_TIME = 15
+MAX_INTERNAL = 3.5  # 几秒检测一次画面
+my_click = MyClick()
+my_detector = Detector()
+
+
+def only_one_queren(buttons):
+    # 只保留 '确认' 中 y 最小（最靠上）的那个
+    queren_buttons = [btn for btn in buttons if btn["label"] == "queren"]
+
+    if queren_buttons:
+        # 找到 bbox 中 y2 最大的那个
+        lowest_queren = min(queren_buttons, key=lambda b: b["bbox"][3])
+        filtered_buttons = [btn for btn in buttons if btn["label"] != "queren"]
+        filtered_buttons.append(lowest_queren)
+        return filtered_buttons
+    else:
+        return buttons
+
+
+def press_button(buttons, label):
+    for button in buttons:
+        if button['label'] == label:
+            my_click.click(button['bbox'])
+            return True
+    print('not found: ', label)
+    return False
+
+
+def press_toolbar(buttons, image):
+    for button in buttons:
+        if button['label'] == 'toolbar':
+            x1, y1, x2, y2 = button['bbox']
+            toolbar_height = y2 - y1
+            toolbar_width = x2 - x1
+
+            unit = toolbar_height / 252  # 基于 12:28 的比例划分单位高度
+            gap = unit * 12
+            btn_size = unit * 28
+
+            for i in [1, 2, 4]:  # 尝试点击按钮
+                top = int(y1 + gap + i * (btn_size + gap))
+                bottom = int(top + btn_size)
+                left = int(x1 + gap)
+                right = int(x2 - gap)
+
+                cropped_image = image[top:bottom, left:right]
+                mean_color = cv2.mean(cropped_image)[:3]
+                b, g, r = mean_color
+
+                if not (g > r and g > b):
+                    my_click.click((left, top, right, bottom))
+
+
 
 if __name__ == '__main__':
-    colorama.init()
-    print(Fore.WHITE)
-    my_click = MyClick()
-    my_detector = Detector()
-    my_step = step
-
-    waiting = False
-    queuing = False
-    wait_time = None
-    queue_time = None
-
+    last_infer_time = -10000
     while True:
+        now_time = time()
+        if now_time - last_infer_time <= MAX_INTERNAL:
+            continue
+        last_infer_time = now_time
+
         # 获取游戏界面范围
         box = get_box()
         my_click.set_top_left_corner(box)
 
         # 获取游戏界面
-        image = np.array(pyscreenshot.grab(box))
+        image = np.array(ImageGrab.grab(box))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         # 用视觉模型识别游戏界面
-        xyxy_tiles, tiles = my_detector.detect_tiles(image)
-        xyxy_buttons, buttons = my_detector.detect_frame(image)
-        char_dict = my_detector.detect_characters(image)
+        tiles = my_detector.detect_tiles(image)
+        buttons = my_detector.detect_frame(image)
 
-        print(char_dict.keys())
+        # 过滤按钮
+        button_filters = [
+            only_one_queren
+        ]
+        for filter in button_filters:
+            buttons = filter(buttons)
+        button_labels = [btn['label'] for btn in buttons]
 
-        if '3p-east' in buttons or 'match' in buttons or 'silver' in buttons:  # 匹配中
-            print(Fore.GREEN + f'[{datetime.datetime.now()}]: 匹配中' + Fore.WHITE)
-            waiting = False
-            if queuing and time() - queue_time < MAX_QUEUE_TIME:
-                continue
-            if '3p-east' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('3p-east')])
-                queuing = True
-                queue_time = time()
-            elif 'match' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('match')])
-            elif 'silver' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('silver')])
+        # 匹配中
+        if 'pipei_1' in button_labels or 'pipei_2' in button_labels:
+            print("In queue")
+            continue
 
-        elif 'zhongju' in char_dict.keys() or 'queren' in char_dict.keys():  # 终局界面
-            print(Fore.GREEN + f'[{datetime.datetime.now()}]: 终局界面' + Fore.WHITE)
-            waiting = queuing = False
-            if '2queren' in char_dict.keys():  # 有两个确认，即“再来一场”的确认窗口，此时点确认
-                if 'queren' in char_dict.keys():
-                    my_click.click(char_dict['queren'])
-            elif 'zailaiyichang' in char_dict.keys():  # 有再来一场且没有两个确认，此时点再来一场
-                my_click.click(char_dict['zailaiyichang'])
-            elif 'queren' in char_dict.keys():  # 只有一个确认，应该是展示得分、奖励等界面，此时点击确认
-                my_click.click(char_dict['queren'])
-            else:  # 只有终局，没有其他文字，应该是活动奖励界面，这个界面没有确认按钮，此时点一下屏幕中间
+        # 总是会按下的按钮
+        # 其中，confirm是两小局之间的蓝色确认按钮，queren是大局之间的黄色按钮
+        always_press_group = [
+            ['match', 'silver', '3p-east', 'zailaiyichang', 'zimo', 'he', 'babei'],
+            ['queren', 'confirm']  # 再来一场优先级高于确认
+        ]
+        is_pressed = False
+        for always_press in always_press_group:
+            for label in always_press:
+                if press_button(buttons, label):
+                    is_pressed = True
+                    break
+            if is_pressed:
+                break
+        if is_pressed:
+            print("Pressed a button")
+            continue
+
+        # 处于一局游戏内
+        if len(tiles) >= 13:
+            press_toolbar(buttons, image)
+            if len(tiles) == 13:
+                print("In game, not my turn")
+                press_button(buttons, 'tiaoguo')
+            elif len(tiles) == 14:
+                print("In game, discard")
+                tile, button = step([t['label'] for t in tiles])
+                press_button(buttons, button)
+                press_button(tiles, tile)
+                my_click.click((0, 0, box[2] - box[0], box[3] - box[1]), click=False)
+
+        # 未知情况，尝试点击屏幕中间
+        elif len(tiles) < 3:
+            print("Where am I?")
+            for i in range(4):
                 my_click.click((0, 0, box[2] - box[0], box[3] - box[1]))
-
-        else:  # 游戏中（或未知界面）
-            print(Fore.GREEN + f'[{datetime.datetime.now()}]: 游戏中' + Fore.WHITE)
-            # 尝试按左侧按钮
-            if 'lhmqb' in char_dict.keys():
-                xyxy = char_dict['lhmqb']
-                for x in [0, 1, 2, 4]:  # 尝试点下五个按钮中的第x个
-                    height = (xyxy[3] - xyxy[1]) // 5
-                    left, top, right, bottom = (int(xyxy[0]), int(xyxy[1] + x * height),
-                                                int(xyxy[2]), int(xyxy[1] + (x + 1) * height))
-                    cropped_image = image[top: bottom, left: right]
-                    mean_color = cv2.mean(cropped_image)[:3]
-                    b, g, r = mean_color
-                    if not (g > r and g > b and g - r > 20):  # 如果是按下状态，绿色应该占主导
-                        my_click.click((left, top, right, bottom))
-
-            # 处理游戏内容
-            p_waiting = waiting
-            waiting = False  # 如果以下一条触发，waiting就应该取消，否则就应该保持。这里提前取消
-            if 'zimo' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('zimo')])
-            elif 'he' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('he')])
-            elif 'babei' in buttons:
-                my_click.click(xyxy_buttons[buttons.index('babei')])
-            elif ('chi' in buttons or 'peng' in buttons or 'gang' in buttons) and \
-                    'lizhi' not in buttons and 'babei' not in buttons:  # 副露的选择：bot选择永远不副露
-                if 'chi' in buttons:
-                    pass
-                if 'peng' in buttons:
-                    pass
-                if 'gang' in buttons:
-                    pass
-                if 'tiaoguo' in buttons:
-                    my_click.click(xyxy_buttons[buttons.index('tiaoguo')])
-                else:  # 有按钮但没检测到跳过
-                    pass
-            elif len(tiles) == 14:  # 切牌，拔北或立直
-                tile, button = my_step(tiles)
-                # print('tile = %s, button = %s' % (tile, button))
-                if button in buttons:  # 拔北或立直
-                    my_click.click(xyxy_buttons[buttons.index(button)])
-                    sleep(0.3)
-                elif button:  # 要求按钮但没检测到
-                    pass
-                if tile in tiles:
-                    my_click.click(xyxy_tiles[tiles.index(tile)])
-                elif tile:  # 没检测到要求切的牌
-                    pass
-            else:  # 等待中，或处于未知界面
-                waiting = p_waiting  # 以上一条都没有触发，执行到这一行，那么waiting应该不变（取回原状态）
-                if not waiting:
-                    print('begin wait.', wait_time)
-                    waiting = True
-                    wait_time = time()
-                elif time() - wait_time > MAX_WAIT_TIME:
-                    # 很久没有检测到认识的目标了，应该是卡在了领取奖励页面
-                    # 尝试点击屏幕中心
-                    print('wait long.', time())
-                    waiting = False
-                    for i in range(7):
-                        my_click.click((0, 0, box[2] - box[0], box[3] - box[1]))
-                        sleep(0.05)
-
-        # 将鼠标挪到中间，避免遮挡目标
-        my_click.click((0, 0, box[2] - box[0], box[3] - box[1]), click=False)
 

@@ -1,4 +1,5 @@
 import pyautogui
+from time import sleep
 
 
 class MyClick:
@@ -18,3 +19,4 @@ class MyClick:
         if click:
             print('click x = %d, y = %d' % (x, y))
             pyautogui.click()
+            sleep(0.1)
